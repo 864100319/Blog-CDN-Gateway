@@ -377,7 +377,11 @@ export default {
 						}
 					}
 			
+					// 首次测速
 					window.onload = runTests;
+					
+					// 每10秒重新测速一次
+					setInterval(runTests, 10000);
 				</script>
 			</body>
 			</html>
