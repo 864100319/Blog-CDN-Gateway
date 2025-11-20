@@ -369,10 +369,11 @@ export default {
 								}
 							});
 
-							const currentPath = '${path}';
-							const currentParams = '${params}';
-							const redirectUrl = fastest.originalUrl + currentPath + currentParams;
-							window.location.href = redirectUrl;
+							// const currentPath = '${path}';
+							// const currentParams = '${params}';
+							// const redirectUrl = fastest.originalUrl + currentPath + currentParams;
+							// window.location.href = redirectUrl;
+							// 自动跳转已屏蔽，请手动选择节点
 						}
 					}
 			
