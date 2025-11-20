@@ -282,6 +282,13 @@ export default {
 						const li = document.createElement("li");
 						li.id = \`result\${index}\`;
 						li.innerHTML = \`\${name} <span id="latency\${index}">测速中...</span>\`;
+						li.style.cursor = 'pointer';
+						li.onclick = function() {
+							const currentPath = '${path}';
+							const currentParams = '${params}';
+							const redirectUrl = testUrl + currentPath + currentParams;
+							window.open(redirectUrl, '_blank');
+						};
 						ul.appendChild(li);
 					});
 			
