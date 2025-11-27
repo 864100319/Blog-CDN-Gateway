@@ -4,5 +4,9 @@
   "build": {
     "command": "echo 'No build required for static site'",
     "output": "dist"
+  },
+  "deployment": {
+    "regions": ["global"],
+    "excludeRegions": ["cn"]
   }
 }
