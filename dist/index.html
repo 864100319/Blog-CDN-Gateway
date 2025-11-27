@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zhang - BlogCDN 智能访问网关</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+            margin: 0;
+            padding: 0;
+            background-image: url('https://raw.cmliussss.com/keqing1080p.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(10px);
+            border-radius: 24px;
+            padding: 30px;
+            width: 480px;
+            min-height: 620px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .container:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.15);
+        }
+
+        .logo-container {
+            position: relative;
+            width: 180px;
+            height: 180px;
+            margin-bottom: 20px;
+        }
+
+        .logo {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 8px solid white;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            animation: pulse 2s infinite;
+            object-fit: cover;
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(107, 223, 143, 0.4);
+            }
+            70% {
+                box-shadow: 0 0 0 20px rgba(107, 223, 143, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(107, 223, 143, 0);
+            }
+        }
+
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+
+        h1 {
+            color: #1a1f36;
+            font-size: 28px;
+            font-weight: 700;
+            text-align: center;
+            margin: 0 0 30px 0;
+            padding-bottom: 15px;
+            position: relative;
+        }
+
+        h1::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 4px;
+            background: linear-gradient(90deg, #6bdf8f, #a7f3d0, #34d399, #10b981);
+            background-size: 200% 100%;
+            animation: flowingLight 2s linear infinite;
+            border-radius: 2px;
+        }
+
+        @keyframes flowingLight {
+            0% {
+                background-position: 200% 50%;
+            }
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        .description {
+            width: 100%;
+            padding: 0 15px;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        ul {
+            list-style: none;
+            width: 100%;
+        }
+
+        ul li {
+            color: #1a1f36;
+            font-size: 16px;
+            line-height: 1.6;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+
+        ul li:hover {
+            background: rgba(255, 255, 255, 0.8);
+            transform: translateX(5px);
+        }
+
+        .beian-info a {
+            color: #6bdf8f;
+            text-decoration: none;
+            border-bottom: 1px dashed #6bdf8f;
+            padding-bottom: 2px;
+        }
+
+        .beian-info a:hover {
+            border-bottom-style: solid;
+        }
+
+        #visitCount, #liveuser {
+            font-weight: 600;
+            color: #2d3748;
+            margin: 0 4px;
+        }
+
+        @media (max-width: 500px) {
+            .container {
+                width: 90%;
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo-container">
+            <img class="logo" src="https://raw.cmliussss.com/IMG_0038.png" alt="Logo">
+        </div>
+        <h1>BlogCDN 智能访问网关</h1>
+        <ul class="description" id="urls"></ul>
+        <div class="beian-info" style="text-align: center; font-size: 13px;">
+            <a href='https://icp.gov.moe/'>萌ICP备-20070707号</a>
+        </div>
+    </div>
+    <script>
+        const urls = [
+            'https://blog.ikiki.site#Cloudflare Blog',
+            'https://edgeb.ikiki.site#EdgeOne Blog',
+            'https://openlist.ikiki.site/#Cloudflare OpenList',
+            'https://edge.ikiki.site#EdgeOne OpenList'
+        ];
+        
+        // 动态生成URL列表
+        const ul = document.getElementById("urls");
+        urls.forEach((url, index) => {
+            const [testUrl, name] = url.split('#');
+            const li = document.createElement("li");
+            li.id = `result${index}`;
+            li.innerHTML = `${name} <span id="latency${index}">测速中...</span>`;
+            li.style.cursor = 'pointer';
+            li.onclick = function() {
+                const currentPath = window.location.pathname;
+                const currentParams = window.location.search;
+                const redirectUrl = testUrl + currentPath + currentParams;
+                window.open(redirectUrl, '_blank');
+            };
+            ul.appendChild(li);
+        });
+
+        const timeout = 3000;
+
+        function testLatency(url) {
+            return new Promise((resolve) => {
+                const start = Date.now();
+                const xhr = new XMLHttpRequest();
+                xhr.open('HEAD', url, true);
+                xhr.timeout = timeout;
+
+                xhr.onload = function () {
+                    const latency = Date.now() - start;
+                    if (xhr.status === 200) {
+                        resolve({ url, latency });
+                    } else {
+                        resolve({ url, latency: `状态码: ${xhr.status}` });
+                    }
+                };
+
+                xhr.ontimeout = function () {
+                    resolve({ url, latency: `响应超时 ${timeout}ms` });
+                };
+
+                xhr.onerror = function () {
+                    const latency = Date.now() - start;
+                    if (xhr.status === 0 && latency > 10 && latency < timeout) {
+                        resolve({ url, latency });
+                    } else {
+                        resolve({ url, latency: '请求失败' });
+                    }
+                };
+
+                xhr.send();
+            });
+        }
+
+        function getLatencyColor(latency) {
+            if (latency <= 100) return '#22c55e';
+            if (latency <= 200) return '#84cc16';
+            if (latency <= 500) return '#eab308';
+            if (latency <= 1000) return '#f97316';
+            if (latency > 1000) return '#ef4444';
+            return '#dc2626';
+        }
+
+        async function runTests() {
+            const results = await Promise.all(urls.map((url, index) => {
+                const [testUrl, name] = url.split('#');
+                return testLatency(testUrl).then(result => ({
+                    ...result,
+                    name,
+                    originalUrl: testUrl,
+                    index
+                }));
+            }));
+
+            results.forEach((result, index) => {
+                const li = document.getElementById(`result${index}`);
+                const latencySpan = document.getElementById(`latency${index}`);
+                if (typeof result.latency === 'number') {
+                    latencySpan.textContent = `${result.latency}ms`;
+                    latencySpan.style.color = getLatencyColor(result.latency);
+                } else {
+                    latencySpan.textContent = result.latency;
+                    latencySpan.style.color = '#dc2626';
+                }
+            });
+
+            const validResults = results.filter(result => typeof result.latency === 'number');
+            if (validResults.length > 0) {
+                const fastest = validResults.reduce((prev, current) => 
+                    (prev.latency < current.latency ? prev : current), validResults[0]);
+
+                results.forEach((result, index) => {
+                    if (result.name === fastest.name) {
+                        const li = document.getElementById(`result${index}`);
+                        li.style.background = 'rgba(107, 223, 143, 0.3)';
+                        li.style.border = '2px solid rgba(107, 223, 143, 0.5)';
+                        li.style.transform = 'translateX(5px)';
+                    }
+                });
+            }
+        }
+
+        // 首次测速
+        window.onload = runTests;
+        
+        // 每10秒重新测速一次
+        setInterval(runTests, 10000);
+    </script>
+</body>
+</html>

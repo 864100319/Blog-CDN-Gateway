@@ -1,0 +1,8 @@
+{
+  "name": "blog-cdn-gateway",
+  "type": "static",
+  "build": {
+    "command": "echo 'No build required for static site'",
+    "output": "dist"
+  }
+}
