@@ -752,6 +752,7 @@ function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay
 			try {
 				const response = await fetch(url, {
 					method: 'HEAD',
+					mode: 'no-cors',
 					signal: controller.signal,
 					cache: 'no-store',
 					redirect: 'follow'
@@ -760,10 +761,14 @@ function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay
 				clearTimeout(timeoutId);
 				const latency = Date.now() - start;
 
+				// opaque = 服务器有响应但无 CORS 头，仍视为可达
+				const ok = response.type === 'opaque' || response.ok;
+				const status = response.type === 'opaque' ? 200 : response.status;
+
 				return {
 					latency,
-					ok: response.status === 200,
-					status: response.status
+					ok,
+					status
 				};
 			} catch (error) {
 				clearTimeout(timeoutId);
