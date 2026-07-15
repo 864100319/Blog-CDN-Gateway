@@ -14,5 +14,11 @@
   "env": {
     "NODE_VERSION": "18"
   },
-  "redirects": []
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/index.html",
+      "statusCode": 301
+    }
+  ]
 }
