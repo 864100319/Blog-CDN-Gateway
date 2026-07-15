@@ -41,7 +41,7 @@ async function handleRequest(request, env = {}) {
 	const path = url.pathname;
 	const params = url.search;
 	const mode = url.searchParams.get('mode') || 'auto';
-	const goto = url.searchParams.get('goto') || path;
+	const goto = url.searchParams.get('goto') || (path === '/index.html' ? '/' : path);
 
 	if (path.toLowerCase() === '/ads.txt') {
 		return new Response(config.ADS, {
