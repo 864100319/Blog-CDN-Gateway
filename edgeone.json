@@ -7,18 +7,15 @@
   },
   "routes": [
     {
+      "src": "/",
+      "dest": "/functions/[[path]].js"
+    },
+    {
       "src": "/.*",
       "dest": "/functions/[[path]].js"
     }
   ],
   "env": {
     "NODE_VERSION": "18"
-  },
-  "redirects": [
-    {
-      "source": "/",
-      "destination": "/index.html",
-      "statusCode": 301
-    }
-  ]
+  }
 }
