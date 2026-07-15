@@ -1,10 +1,9 @@
 const DEFAULT_CONFIG = {
 	// CDN 测速地址，格式为 "访问地址#显示名称"。
 	URLS: [
-		'https://blog.cmliussss.com#Ali CDN',
-		'https://fastly.blog.cmliussss.com#Fastly CDN',
-		'https://vercel.blog.cmliussss.com#Vercel CDN',
-		'https://netlify.blog.cmliussss.com#Netlify CDN'
+		'https://yun.ikiki.site#香港',
+		'https://openlist.ikiki.site#Cloudflare',
+		'https://edgepan.ikiki.site#腾讯CDN'
 	],
 	// /ads.txt 返回内容。
 	ADS: 'google.com, pub-9350003957494520, DIRECT, f08c47fec0942fa0',
@@ -41,6 +40,8 @@ async function handleRequest(request, env = {}) {
 	const url = new URL(request.url);
 	const path = url.pathname;
 	const params = url.search;
+	const mode = url.searchParams.get('mode') || 'auto';
+	const goto = url.searchParams.get('goto') || path;
 
 	if (path.toLowerCase() === '/ads.txt') {
 		return new Response(config.ADS, {
@@ -70,7 +71,9 @@ async function handleRequest(request, env = {}) {
 		config.NAME,
 		config.JUMP_DELAY,
 		path,
-		params
+		params,
+		mode,
+		goto
 	);
 
 	return new Response(html, {
@@ -117,8 +120,9 @@ function toList(value) {
 	return text ? text.split(',').filter(Boolean) : [];
 }
 
-function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay, path, params) {
+function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay, path, params, mode, goto) {
 	const backgroundImage = img ? `url(${JSON.stringify(img)})` : 'var(--default-bg)';
+	const isManual = mode === 'manual';
 
 	return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -443,6 +447,16 @@ function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay
 			animation: fadeIn 0.5s ease forwards;
 		}
 
+		.url-item.clickable {
+			cursor: pointer;
+		}
+
+		.url-item.clickable:hover {
+			background: var(--item-hover-bg);
+			transform: translateY(-3px);
+			box-shadow: var(--item-hover-shadow), 0 0 0 2px var(--accent-color);
+		}
+
 		.url-item:nth-child(1) { animation-delay: 0.2s; }
 		.url-item:nth-child(2) { animation-delay: 0.3s; }
 		.url-item:nth-child(3) { animation-delay: 0.4s; }
@@ -636,11 +650,11 @@ function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay
 			<div class="header-copy">
 				<div class="eyebrow">${siteName}</div>
 				<h1>${title}</h1>
-				<div class="subtitle">正在为您寻找最佳线路...</div>
+				<div class="subtitle">${isManual ? '持续检测中，请点击选择线路' : '正在为您寻找最佳线路...'}</div>
 			</div>
 			<div class="summary-badge">
 				<span class="status-dot"></span>
-				<span class="summary-label">实时测速</span>
+				<span class="summary-label">${isManual ? '持续监控' : '实时测速'}</span>
 			</div>
 		</div>
 
@@ -653,9 +667,10 @@ function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay
 
 	<script>
 		const urls = ${JSON.stringify(urls)};
-		const currentPath = ${JSON.stringify(path)};
+		const redirectPath = ${JSON.stringify(goto)};
 		const currentParams = ${JSON.stringify(params)};
 		const jumpDelay = ${JSON.stringify(Number(jumpDelay) || 0)};
+		const mode = ${JSON.stringify(mode)};
 		const list = document.getElementById('urlList');
 		const container = document.querySelector('.container');
 		const logoWrapper = document.querySelector('.logo-wrapper');
@@ -684,14 +699,20 @@ function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay
 			const [testUrl, name] = url.split('#');
 			const routeName = getRouteName(name, index);
 			const li = document.createElement('li');
-			li.className = 'url-item';
+			li.className = 'url-item' + (mode === 'manual' ? ' clickable' : '');
 			li.id = \`item-\${index}\`;
+			li.dataset.testUrl = testUrl;
 			li.innerHTML = \`
 				<span class="url-info">
 					<span class="url-name">\${routeName}</span>
 				</span>
 				<span class="url-latency latency-checking" id="latency-\${index}">测速中</span>
 			\`;
+			if (mode === 'manual') {
+				li.addEventListener('click', () => {
+					window.location.href = li.dataset.testUrl + redirectPath + currentParams;
+				});
+			}
 			list.appendChild(li);
 		});
 
@@ -755,7 +776,20 @@ function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay
 			}
 		}
 
-		async function runTests() {
+		function resetRound() {
+			document.querySelectorAll('.url-item').forEach(el => {
+				el.classList.remove('fastest');
+				el.style.animation = '';
+			});
+			urls.forEach((_, index) => {
+				const el = document.getElementById(\`latency-\${index}\`);
+				el.className = 'url-latency latency-checking';
+				el.textContent = '测速中';
+			});
+		}
+
+		// ── auto 模式：现有逻辑，测速一次 + 自动跳转 ──
+		async function runAutoTests() {
 			let hasWinner = false;
 			let pendingCount = urls.length;
 
@@ -796,7 +830,7 @@ function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay
 					document.querySelector('.summary-label').textContent = '命中线路';
 
 					setTimeout(() => {
-						window.location.href = item.testUrl + currentPath + currentParams;
+						window.location.href = item.testUrl + redirectPath + currentParams;
 					}, jumpDelay);
 				}
 
@@ -809,8 +843,73 @@ function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay
 			});
 		}
 
+		// ── manual 模式：持续检测，不自动跳转，用户手动点击 ──
+		async function runManualRound() {
+			if (urls.length === 0) return;
+
+			const results = await Promise.all(urls.map(async (urlStr, index) => {
+				const [testUrl, name] = urlStr.split('#');
+				const result = await checkRoute(testUrl);
+				return { index, name: getRouteName(name, index), testUrl, ...result };
+			}));
+
+			const okResults = results.filter(r => r.ok);
+			const fastest = okResults.length > 0
+				? okResults.reduce((a, b) => a.latency <= b.latency ? a : b)
+				: null;
+
+			results.forEach(item => {
+				const el = document.getElementById(\`latency-\${item.index}\`);
+				el.textContent = item.ok ? formatLatency(item.latency) : (item.status === 0 ? '失败' : \`HTTP \${item.status}\`);
+				updateLatency(el, item.latency, item.ok);
+			});
+
+			document.querySelectorAll('.url-item').forEach(el => el.classList.remove('fastest'));
+
+			if (fastest) {
+				const fastestEl = document.getElementById(\`item-\${fastest.index}\`);
+				fastestEl.classList.add('fastest');
+				const subtitle = document.querySelector('.subtitle');
+				subtitle.textContent = \`当前最快: \${fastest.name} (\${formatLatency(fastest.latency)})\`;
+				subtitle.classList.add('is-success');
+				subtitle.classList.remove('is-error');
+				document.querySelector('.summary-badge').classList.remove('error');
+				document.querySelector('.summary-label').textContent = '已命中线路';
+			} else {
+				const subtitle = document.querySelector('.subtitle');
+				subtitle.textContent = '所有线路均未返回 200，将继续检测...';
+				subtitle.classList.add('is-error');
+				subtitle.classList.remove('is-success');
+				document.querySelector('.summary-badge').classList.add('error');
+				document.querySelector('.summary-label').textContent = '检测中';
+			}
+
+			updateViewportFit();
+		}
+
+		async function runManualTests() {
+			if (urls.length === 0) {
+				document.querySelector('.subtitle').textContent = '没有可用线路';
+				document.querySelector('.subtitle').classList.add('is-error');
+				document.querySelector('.summary-badge').classList.add('error');
+				document.querySelector('.summary-label').textContent = '检测失败';
+				return;
+			}
+
+			await runManualRound();
+			setInterval(async () => {
+				resetRound();
+				await runManualRound();
+			}, 5000);
+		}
+
 		window.addEventListener('load', updateViewportFit);
-		runTests();
+
+		if (mode === 'manual') {
+			runManualTests();
+		} else {
+			runAutoTests();
+		}
 	</script>
 </body>
 </html>`;
