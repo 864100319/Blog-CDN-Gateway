@@ -1,10 +1,9 @@
 const DEFAULT_CONFIG = {
 	// CDN 测速地址，格式为 "访问地址#显示名称"。
 	URLS: [
-		'https://blog.cmliussss.com#Ali CDN',
-		'https://fastly.blog.cmliussss.com#Fastly CDN',
-		'https://vercel.blog.cmliussss.com#Vercel CDN',
-		'https://netlify.blog.cmliussss.com#Netlify CDN'
+		'https://yun.ikiki.site#香港',
+		'https://openlist.ikiki.site#Cloudflare',
+		'https://edgepan.ikiki.site#腾讯CDN'
 	],
 	// /ads.txt 返回内容。
 	ADS: 'google.com, pub-9350003957494520, DIRECT, f08c47fec0942fa0',
@@ -54,11 +53,62 @@ async function handleRequest(request, env = {}) {
 		return fetch(config.ICO);
 	}
 
+	// 服务端代理测速端点，解决浏览器跨域问题
+	if (path.toLowerCase() === '/__check') {
+		const target = url.searchParams.get('url');
+		if (!target) {
+			return new Response(JSON.stringify({ error: 'missing url param' }), {
+				status: 400,
+				headers: { 'content-type': 'application/json;charset=UTF-8' }
+			});
+		}
+
+		const start = Date.now();
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+		try {
+			const resp = await fetch(target, {
+				method: 'HEAD',
+				signal: controller.signal,
+				redirect: 'follow'
+			});
+			clearTimeout(timeoutId);
+			const latency = Date.now() - start;
+
+			return new Response(JSON.stringify({
+				latency,
+				ok: resp.status === 200,
+				status: resp.status
+			}), {
+				headers: {
+					'content-type': 'application/json;charset=UTF-8',
+					'access-control-allow-origin': '*'
+				}
+			});
+		} catch (e) {
+			clearTimeout(timeoutId);
+			return new Response(JSON.stringify({
+				latency: 9999,
+				ok: false,
+				status: 0
+			}), {
+				headers: {
+					'content-type': 'application/json;charset=UTF-8',
+					'access-control-allow-origin': '*'
+				}
+			});
+		}
+	}
+
 	const urls = toList(config.URLS);
 	const images = toList(config.IMG);
 	const img = images.length > 0
 		? images[Math.floor(Math.random() * images.length)]
 		: '';
+
+	// 检测模式仅由 URL 参数 ?mode= 决定: "quick"(默认) 一次检测命中即跳转; "continuous" 每5秒持续检测不自动跳转
+	const checkMode = url.searchParams.get('mode')?.toLowerCase() === 'continuous' ? 'continuous' : 'quick';
 
 	const html = generateHtml(
 		urls,
@@ -69,6 +119,7 @@ async function handleRequest(request, env = {}) {
 		config.TITLE,
 		config.NAME,
 		config.JUMP_DELAY,
+		checkMode,
 		path,
 		params
 	);
@@ -117,7 +168,7 @@ function toList(value) {
 	return text ? text.split(',').filter(Boolean) : [];
 }
 
-function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay, path, params) {
+function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay, checkMode, path, params) {
 	const backgroundImage = img ? `url(${JSON.stringify(img)})` : 'var(--default-bg)';
 
 	return `<!DOCTYPE html>
@@ -656,6 +707,7 @@ function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay
 		const currentPath = ${JSON.stringify(path)};
 		const currentParams = ${JSON.stringify(params)};
 		const jumpDelay = ${JSON.stringify(Number(jumpDelay) || 0)};
+		const checkMode = ${JSON.stringify(checkMode)};
 		const list = document.getElementById('urlList');
 		const container = document.querySelector('.container');
 		const logoWrapper = document.querySelector('.logo-wrapper');
@@ -723,36 +775,24 @@ function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay
 			else el.classList.add('latency-poor');
 		}
 
-		async function checkRoute(url) {
+		async function checkRoute(testUrl) {
 			const start = Date.now();
-			const controller = new AbortController();
-			const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-			try {
-				const response = await fetch(url, {
-					method: 'HEAD',
-					signal: controller.signal,
-					cache: 'no-store',
-					redirect: 'follow'
-				});
+			// 并行发起两个请求：
+			// 1. 浏览器端 no-cors 请求 → 测量用户到目标的真实延迟
+			// 2. 服务端 /__check 代理 → 验证目标是否返回 HTTP 200
+			const [browserResult, serverResult] = await Promise.allSettled([
+				fetch(testUrl, { method: 'HEAD', mode: 'no-cors', cache: 'no-store', redirect: 'follow' }),
+				fetch('/__check?url=' + encodeURIComponent(testUrl), { cache: 'no-store' }).then(r => r.json())
+			]);
 
-				clearTimeout(timeoutId);
-				const latency = Date.now() - start;
+			// 浏览器端请求成功 → 取真实用户延迟；失败 → 网络不通，延迟9999
+			const latency = browserResult.status === 'fulfilled' ? Date.now() - start : 9999;
+			// 服务端验证 → 是否返回 200
+			const ok = serverResult.status === 'fulfilled' ? serverResult.value.ok : false;
+			const status = serverResult.status === 'fulfilled' ? serverResult.value.status : 0;
 
-				return {
-					latency,
-					ok: response.status === 200,
-					status: response.status
-				};
-			} catch (error) {
-				clearTimeout(timeoutId);
-
-				return {
-					latency: 9999,
-					ok: false,
-					status: 0
-				};
-			}
+			return { latency, ok, status };
 		}
 
 		async function runTests() {
@@ -766,6 +806,9 @@ function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay
 				document.querySelector('.summary-label').textContent = '检测失败';
 				return;
 			}
+
+			// 清除上一轮 fastest 标记
+			document.querySelectorAll('.url-item.fastest').forEach(el => el.classList.remove('fastest'));
 
 			urls.forEach(async (urlStr, index) => {
 				const [testUrl, name] = urlStr.split('#');
@@ -784,7 +827,7 @@ function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay
 				updateLatency(el, item.latency, item.ok);
 				updateViewportFit();
 
-				if (!hasWinner && item.ok) {
+				if (checkMode === 'quick' && !hasWinner && item.ok) {
 					hasWinner = true;
 
 					const fastestEl = document.getElementById(\`item-\${item.index}\`);
@@ -800,17 +843,38 @@ function generateHtml(urls, img, icon, avatar, beian, title, siteName, jumpDelay
 					}, jumpDelay);
 				}
 
-				if (!hasWinner && pendingCount === 0) {
+				if (checkMode === 'continuous' && item.ok) {
+					// 持续模式：标记最快线路但不跳转
+					const fastestEl = document.getElementById(\`item-\${item.index}\`);
+					fastestEl.classList.add('fastest');
+				}
+
+				if (!hasWinner && pendingCount === 0 && checkMode === 'quick') {
 					document.querySelector('.subtitle').textContent = '所有线路均未返回 200';
 					document.querySelector('.subtitle').classList.add('is-error');
 					document.querySelector('.summary-badge').classList.add('error');
 					document.querySelector('.summary-label').textContent = '检测失败';
 				}
 			});
+
+			// 持续模式：更新状态徽章
+			if (checkMode === 'continuous') {
+				const subtitle = document.querySelector('.subtitle');
+				subtitle.textContent = '持续监测线路状态...';
+				subtitle.classList.remove('is-error');
+				subtitle.classList.remove('is-success');
+				document.querySelector('.summary-label').textContent = '持续监测';
+				document.querySelector('.summary-badge').classList.remove('error');
+			}
 		}
 
 		window.addEventListener('load', updateViewportFit);
 		runTests();
+
+		// 持续模式：每5秒重新检测
+		if (checkMode === 'continuous') {
+			setInterval(runTests, 5000);
+		}
 	</script>
 </body>
 </html>`;
